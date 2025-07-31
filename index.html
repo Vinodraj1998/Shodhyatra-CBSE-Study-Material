@@ -285,8 +285,9 @@
         <div class="export-section">
             <button class="btn" onclick="exportData()">📊 Export to CSV (Excel Compatible)</button>
             <button class="btn" onclick="exportToExcel()" style="background: #28a745; margin-left: 10px;">📗 Export to Excel Format</button>
-            <button class="btn" onclick="saveData()" style="background: #17a2b8; margin-left: 10px;">💾 Save Dashboard Data</button>
+            <button class="btn" onclick="saveData()" style="background: #17a2b8; margin-left: 10px;">💾 Save to Browser</button>
             <button class="btn" onclick="printDashboard()" style="background: #6f42c1; margin-left: 10px;">🖨️ Print Dashboard</button>
+            <button class="btn" onclick="clearSavedData()" style="background: #dc3545; margin-left: 10px;">🗑️ Clear All Data</button>
         </div>
     </div>
 
@@ -469,9 +470,59 @@
                 timestamp: new Date().toISOString()
             };
             
-            // In a real application, this would save to a database
-            console.log('Saving data:', data);
-            alert('✅ Data saved successfully! (Check console for details)');
+            try {
+                // Save to browser's localStorage
+                localStorage.setItem('cbse_dashboard_data', JSON.stringify(data));
+                alert('✅ Data saved to your browser successfully!');
+                console.log('Data saved:', data);
+            } catch (error) {
+                console.error('Save error:', error);
+                alert('❌ Unable to save data. Please try exporting instead.');
+            }
+        }
+
+        function loadSavedData() {
+            try {
+                const savedData = localStorage.getItem('cbse_dashboard_data');
+                if (savedData) {
+                    const data = JSON.parse(savedData);
+                    chaptersData = data.chaptersData || {};
+                    currentClass = data.currentClass || '';
+                    currentSubject = data.currentSubject || '';
+                    
+                    // Restore UI state if data exists
+                    if (currentClass) {
+                        document.getElementById('classSelect').value = currentClass;
+                        loadSubjects();
+                        
+                        if (currentSubject) {
+                            // Small delay to ensure subjects are loaded
+                            setTimeout(() => {
+                                selectSubject(currentSubject);
+                            }, 100);
+                        }
+                    }
+                    
+                    console.log('Data loaded from browser storage');
+                    return true;
+                }
+            } catch (error) {
+                console.error('Load error:', error);
+            }
+            return false;
+        }
+
+        function clearSavedData() {
+            if (confirm('⚠️ This will delete all your saved data. Are you sure?')) {
+                localStorage.removeItem('cbse_dashboard_data');
+                chaptersData = {};
+                currentClass = '';
+                currentSubject = '';
+                document.getElementById('classSelect').value = '';
+                document.getElementById('subjectsContainer').innerHTML = '';
+                document.getElementById('chaptersContainer').innerHTML = '';
+                alert('✅ All data cleared successfully!');
+            }
         }
 
         function exportData() {
@@ -524,12 +575,197 @@
             }
         }
 
+        function exportToExcel() {
+            if (Object.keys(chaptersData).length === 0) {
+                alert('⚠️ No data to export! Please add some chapters first.');
+                return;
+            }
+
+            try {
+                // Create HTML table for Excel
+                let htmlContent = `
+                    <html>
+                    <head>
+                        <meta charset="utf-8">
+                        <title>CBSE Dashboard Data</title>
+                        <style>
+                            table { border-collapse: collapse; width: 100%; }
+                            th, td { border: 1px solid #000; padding: 8px; text-align: left; }
+                            th { background-color: #4CAF50; color: white; font-weight: bold; }
+                            tr:nth-child(even) { background-color: #f2f2f2; }
+                        </style>
+                    </head>
+                    <body>
+                        <h1>CBSE Classes 1-12 Dashboard Data</h1>
+                        <p>Generated on: ${new Date().toLocaleString()}</p>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Class</th>
+                                    <th>Subject</th>
+                                    <th>Chapter No.</th>
+                                    <th>Chapter Name</th>
+                                    <th>Resource Link</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+
+                for (const [key, chapters] of Object.entries(chaptersData)) {
+                    const [classNum, subject] = key.split('-');
+                    chapters.forEach((chapter, index) => {
+                        htmlContent += `
+                            <tr>
+                                <td>${classNum}</td>
+                                <td>${subject}</td>
+                                <td>${index + 1}</td>
+                                <td>${chapter.name}</td>
+                                <td>${chapter.link ? `<a href="${chapter.link}" target="_blank">${chapter.link}</a>` : ''}</td>
+                            </tr>
+                        `;
+                    });
+                }
+
+                htmlContent += `
+                            </tbody>
+                        </table>
+                    </body>
+                    </html>
+                `;
+
+                const blob = new Blob([htmlContent], { 
+                    type: 'application/vnd.ms-excel;charset=utf-8;' 
+                });
+                
+                const link = document.createElement('a');
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', 'CBSE_Dashboard_Data.xls');
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+                
+                alert('✅ Excel file exported successfully!');
+                
+            } catch (error) {
+                console.error('Excel export error:', error);
+                alert('❌ Excel export failed. Please try the CSV export instead.');
+            }
+        }
+
+        function printDashboard() {
+            if (Object.keys(chaptersData).length === 0) {
+                alert('⚠️ No data to print! Please add some chapters first.');
+                return;
+            }
+
+            const printWindow = window.open('', '_blank');
+            let printContent = `
+                <html>
+                <head>
+                    <title>CBSE Dashboard - Print View</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; margin: 20px; }
+                        h1 { color: #2c3e50; text-align: center; }
+                        h2 { color: #34495e; border-bottom: 2px solid #3498db; padding-bottom: 5px; }
+                        table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+                        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+                        th { background-color: #3498db; color: white; }
+                        tr:nth-child(even) { background-color: #f9f9f9; }
+                        @media print {
+                            body { margin: 0; }
+                            .no-print { display: none; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    <h1>🎓 CBSE Classes 1-12 Dashboard</h1>
+                    <p style="text-align: center;">Generated on: ${new Date().toLocaleString()}</p>
+            `;
+
+            // Group data by class and subject
+            const groupedData = {};
+            for (const [key, chapters] of Object.entries(chaptersData)) {
+                const [classNum, subject] = key.split('-');
+                if (!groupedData[classNum]) groupedData[classNum] = {};
+                groupedData[classNum][subject] = chapters;
+            }
+
+            // Generate tables for each class-subject combination
+            for (const [classNum, subjects] of Object.entries(groupedData)) {
+                for (const [subject, chapters] of Object.entries(subjects)) {
+                    printContent += `
+                        <h2>Class ${classNum} - ${subject}</h2>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th style="width: 10%;">S.No.</th>
+                                    <th style="width: 50%;">Chapter Name</th>
+                                    <th style="width: 40%;">Resource Link</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                    `;
+                    
+                    chapters.forEach((chapter, index) => {
+                        printContent += `
+                            <tr>
+                                <td>${index + 1}</td>
+                                <td>${chapter.name}</td>
+                                <td style="word-break: break-all;">${chapter.link}</td>
+                            </tr>
+                        `;
+                    });
+                    
+                    printContent += '</tbody></table>';
+                }
+            }
+
+            printContent += `
+                    <div class="no-print" style="text-align: center; margin-top: 30px;">
+                        <button onclick="window.print()" style="padding: 10px 20px; background: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer;">🖨️ Print</button>
+                        <button onclick="window.close()" style="padding: 10px 20px; background: #95a5a6; color: white; border: none; border-radius: 5px; cursor: pointer; margin-left: 10px;">❌ Close</button>
+                    </div>
+                </body>
+                </html>
+            `;
+
+            printWindow.document.write(printContent);
+            printWindow.document.close();
+        }
+
         // Auto-save functionality
         setInterval(() => {
             if (Object.keys(chaptersData).length > 0) {
                 saveData();
             }
         }, 300000); // Auto-save every 5 minutes
+
+        // Load saved data when page loads
+        window.addEventListener('load', function() {
+            const dataLoaded = loadSavedData();
+            if (dataLoaded) {
+                // Show notification that data was restored
+                setTimeout(() => {
+                    const notification = document.createElement('div');
+                    notification.innerHTML = '✅ Your previous data has been restored!';
+                    notification.style.cssText = `
+                        position: fixed; top: 20px; right: 20px; 
+                        background: #28a745; color: white; 
+                        padding: 15px 20px; border-radius: 8px; 
+                        z-index: 1000; font-weight: bold;
+                        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+                    `;
+                    document.body.appendChild(notification);
+                    
+                    setTimeout(() => {
+                        notification.remove();
+                    }, 3000);
+                }, 1000);
+            }
+        });
     </script>
 </body>
 </html>
